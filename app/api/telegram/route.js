@@ -7,16 +7,27 @@ export async function POST(req) {
     const chatId = msg.chat.id;
     const text = msg.text?.trim();
 
-    // /image command
+    // /start
+    if (text === "/start") {
+      await send(chatId,
+        "🤖 *Gemini Image Bot*\n\n" +
+        "Image banane ke liye likho:\n" +
+        "/image ek ladka sunset me\n\n" +
+        "⚠️ Ye bot Gemini Image API use karta hai."
+      );
+      return Response.json({ ok: true });
+    }
+
+    // /image prompt
     if (text && text.startsWith("/image")) {
       const prompt = text.replace("/image", "").trim();
 
       if (!prompt) {
-        await send(chatId, "❌ Use:\n/image ek ladka sunset me");
+        await send(chatId, "❌ Usage:\n/image ek ladka mountain par");
         return Response.json({ ok: true });
       }
 
-      await send(chatId, "🎨 Gemini image generate ho rahi hai...\n⏳ Wait karo");
+      await send(chatId, "🎨 Gemini se image generate ho rahi hai...\n⏳ Thoda wait karo");
 
       const imageBuffer = await generateGeminiImage(prompt);
 
@@ -32,29 +43,51 @@ export async function POST(req) {
       return Response.json({ ok: true });
     }
 
-    await send(chatId, "👉 Image ke liye likho:\n/image ek ladka mountain par");
+    // Default reply
+    await send(chatId, "👉 Image ke liye likho:\n/image ek ladka coffee shop me");
     return Response.json({ ok: true });
 
   } catch (err) {
-    console.error("GEMINI BOT ERROR:", err);
+    console.error("GEMINI IMAGE BOT ERROR:", err);
+
+    // User-friendly error
+    try {
+      const body = await req.json();
+      const chatId = body?.message?.chat?.id;
+      if (chatId) {
+        await send(chatId,
+          "❌ Image generate nahi ho pa rahi.\n" +
+          "Possible reasons:\n" +
+          "• Gemini Image API enabled nahi\n" +
+          "• Quota / permission issue\n\n" +
+          "Try later or contact admin."
+        );
+      }
+    } catch {}
+
     return Response.json({ ok: true });
   }
 }
 
-// ---------------- HELPERS ----------------
+// ================= HELPERS =================
 
+// Send text message
 async function send(chatId, text) {
   await fetch(
     `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text })
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "Markdown"
+      })
     }
   );
 }
 
-// 🔥 Gemini Imagen (Direct Image Generation)
+// 🔥 DIRECT GEMINI IMAGE GENERATION (Imagen)
 async function generateGeminiImage(prompt) {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict?key=${process.env.GEMINI_API_KEY}`,
@@ -69,15 +102,14 @@ async function generateGeminiImage(prompt) {
   );
 
   if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(errText);
+    const errorText = await res.text();
+    throw new Error(errorText);
   }
 
   const data = await res.json();
 
-  // base64 image
   return Buffer.from(
     data.predictions[0].bytesBase64Encoded,
     "base64"
   );
-  }
+}
